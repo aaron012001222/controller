@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/.venv/
+
+# Node.js (前端依赖绝对不能传，太大了)
+frontend/node_modules/
+frontend/npm-debug.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# 注意：我们故意不忽略 frontend/dist 和 traffic.db (如果是初始空库)
+# 如果 traffic.db 包含敏感数据，请加上 backend/traffic.db

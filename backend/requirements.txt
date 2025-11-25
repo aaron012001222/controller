@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-jose[cryptography]
+passlib[bcrypt]
+httpx
+redis
+aliyun-python-sdk-core
+aliyun-python-sdk-domain
+apscheduler
+dnspython
+requests

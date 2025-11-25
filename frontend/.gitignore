@@ -1,0 +1,19 @@
+# Python 垃圾文件
+__pycache__/
+*.py[cod]
+backend/venv/
+backend/.venv/
+*.db
+
+# Node 依赖 (绝对不要上传这个，太大了)
+frontend/node_modules/
+frontend/npm-debug.log
+
+# IDE 配置
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# !表示"不忽略"，即强制上传前端打包结果
+!frontend/dist/

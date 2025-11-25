@@ -1,0 +1,28 @@
+/* 1. 删除里面原本乱七八糟的所有代码 */
+/* 2. 只保留下面这些： */
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  /* 强制背景色为深色，防止视频加载前闪瞎眼 */
+  background-color: #0f172a;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 100vw;
+  min-height: 100vh;
+  display: block; /* 防止 flex 布局导致的居中 */
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  max-width: none; /* 关键！取消默认的宽度限制 */
+  text-align: left; /* 取消默认的文字居中 */
+}

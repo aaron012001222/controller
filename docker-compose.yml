@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    build: ./backend
+    container_name: traffic_backend
+    restart: always
+    volumes:
+      - ./backend:/app           # 代码映射，方便热更
+      - ./traffic.db:/app/traffic.db # 持久化数据库
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - redis
+
+  # Redis 服务
+  redis:
+    image: redis:alpine
+    container_name: traffic_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # 网关服务 (OpenResty)
+  openresty:
+    image: openresty/openresty:alpine
+    container_name: traffic_gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./openresty/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./openresty/lua:/usr/local/openresty/nginx/lua
+      # 映射前端打包后的 dist 目录
+      - ./frontend/dist:/usr/share/nginx/html 
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - backend
+      - redis
+
+volumes:
+  redis_data:
