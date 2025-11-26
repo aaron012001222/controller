@@ -25,12 +25,29 @@ from database import SessionLocal, EntryDomain, LandingDomain, DomainStatusLog
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def check_domain_status(url):
-    """健康检查逻辑保持不变"""
+    """健康检查逻辑 - 增强伪装版"""
     if not url.startswith(('http://', 'https://')):
         return 'banned'
+    
+    # 伪装成 Chrome 浏览器
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+
     try:
-        response = requests.get(url, timeout=7, verify=False) 
-        return 'ok' if response.status_code < 400 else 'banned'
+        # 增加 timeout 防止卡死，verify=False 忽略证书错误
+        response = requests.get(url, headers=headers, timeout=10, verify=False)
+        
+        # 核心修改：有些网站反爬会返回 403，但这说明网站是活着的
+        # 如果是 403/401 (权限不足)，也视为"ok" (因为网站通了)
+        # 只有 404 (找不到) 或 5xx (服务器崩了) 才算失效
+        if response.status_code < 500 and response.status_code != 404:
+            return 'ok'
+        else:
+            return 'banned'
+            
     except requests.exceptions.RequestException:
         return 'banned'
     except Exception:

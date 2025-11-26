@@ -1,4 +1,4 @@
-# main.py - 终极无删减修复版
+# main.py - 100% 完整无删减版 (修复 Redis 路径丢失 + CF 解析报错)
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -75,32 +75,18 @@ async def get_public_ip():
 # --- 核心：Cloudflare 自动防红配置函数 ---
 async def auto_configure_cf_security(client: httpx.AsyncClient, zone_id: str, headers: dict):
     """
-    自动化配置 Cloudflare 防红策略组合拳：
-    1. Security Level -> High (自动质询可疑流量)
-    2. Rocket Loader -> On (JS混淆/加速)
-    3. Always Use HTTPS -> On (增加信任)
-    4. Minify -> All On (源码压缩混淆)
-    5. Browser Integrity Check -> On (拦截无头浏览器)
-    6. Bot Fight Mode -> On (机器人对抗模式)
+    自动化配置 Cloudflare 防红策略组合拳
     """
     settings_url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/settings"
     
     configs = [
-        # 1. 开启高安全模式 (相当于轻量级 Managed Challenge)
         ("security_level", {"value": "high"}, "安全级别设为 High"),
-        # 2. 开启 Rocket Loader (混淆前端代码，改变JS加载方式)
         ("rocket_loader", {"value": "on"}, "开启 Rocket Loader 混淆"),
-        # 3. 强制 HTTPS (防止协议降级)
         ("always_use_https", {"value": "on"}, "开启强制 HTTPS"),
-        # 4. 代码压缩 (HTML/CSS/JS 全开，去除注释和空格)
         ("minify", {"value": {"css": "on", "html": "on", "js": "on"}}, "开启全站代码压缩"),
-        # 5. 浏览器完整性检查 (拦截爬虫)
         ("browser_integrity_check", {"value": "on"}, "开启浏览器完整性检查"),
-        # 6. 最低 TLS 版本 1.2 (拦截老旧扫描脚本)
         ("min_tls_version", {"value": "1.2"}, "设置最低 TLS 为 1.2"),
-        # 7. 机器人对抗模式 (Bot Fight Mode)
         ("bot_fight_mode", {"value": "on"}, "开启 Bot Fight Mode"),
-        # 8. 质询生效时间 (Challenge TTL) - 验证一次管多久
         ("challenge_ttl", {"value": 1800}, "设置验证码有效期为 30 分钟")
     ]
 
@@ -112,7 +98,6 @@ async def auto_configure_cf_security(client: httpx.AsyncClient, zone_id: str, he
             if resp.status_code == 200:
                 print(f"    [成功] {desc}")
             else:
-                # 某些设置可能需要 Pro 版，或者已经是该状态，或者 API 结构不同
                 print(f"    [跳过] {desc} (状态码: {resp.status_code})")
         except Exception as e:
             print(f"    [错误] {desc}: {e}")
@@ -245,15 +230,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="凭证过期")
     return username
 
-# --- 辅助函数：同步到 Redis ---
+# --- 辅助函数：同步到 Redis (修复 404 的关键！) ---
 def sync_domain_to_redis(domain_obj):
     """将 Entry Domain 状态写入 Redis，供 OpenResty 读取"""
     key = "domain:" + domain_obj.domain
     
     value = {
         "status": domain_obj.status,
-        "project_id": domain_obj.project_id if domain_obj.project_id else "0",
-        "provider": domain_obj.provider
+        "project_id": str(domain_obj.project_id) if domain_obj.project_id else "0",
+        "provider": domain_obj.provider,
+        # 【修复】这里必须把 custom_path 写入 Redis，否则网关查不到路径会报 404
+        "custom_path": domain_obj.custom_path if domain_obj.custom_path else ""
     }
     
     try:
@@ -282,7 +269,7 @@ def sync_landing_pool_to_redis(project_id: int, db: Session):
     except redis.exceptions.ConnectionError:
         print("!!! Redis B Pool Sync 失败.")
 
-# --- 补全缺失的 NS 检查函数 ---
+# --- 补全缺失的 NS 检查函数 (修复 500 错误) ---
 def check_ns_status(domain_obj):
     """检查域名的 NS 记录状态"""
     try:
@@ -309,6 +296,7 @@ def check_ns_status(domain_obj):
         return "failed", "域名不存在"
     except Exception as e:
         return "failed", "DNS 查询失败: " + str(e)
+
 # ================= 接口区域 =================
 
 @app.post("/api/login")
@@ -948,21 +936,22 @@ async def execute_aliyun_setup(req: AliyunDomainImport, db: Session = Depends(ge
                 unique_ns = [ns.lower() for ns in cf_result['result']['name_servers']]
                 zone_id = cf_result['result']['id']
                 
+                # --- 步骤 1.5: 自动添加 A 记录 (修复：显示详细报错) ---
                 if current_server_ip:
                     try:
-                        # 记录返回值以便检查
-                        rec_resp = await client.post(
+                        print(f">>> 正在解析 {domain_name} 到 {current_server_ip}")
+                        dns_resp = await client.post(
                             f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
                             headers=cf_headers,
-                            json={"type": "A", "name": "@", "content": current_server_ip, "ttl": 1, "proxied": True}
+                            json={"type":"A","name":"@","content":current_server_ip.strip(),"ttl":1,"proxied":True}
                         )
-                        # 检查状态码
-                        if rec_resp.status_code == 200:
-                            print(f">>> A记录添加成功: {domain_name}")
+                        if dns_resp.status_code != 200:
+                            print(f"!!! [解析失败] {domain_name}: {dns_resp.text}")
                         else:
-                            print(f"!!! A记录添加失败 [{domain_name}]: {rec_resp.text}")
+                            print(f">>> [解析成功] {domain_name}")
                     except Exception as e:
-                        print(f"!!! A记录请求异常: {str(e)}")                
+                        print(f"!!! [解析异常] {str(e)}")
+                
                 # --- 核心：自动防红配置 ---
                 await auto_configure_cf_security(client, zone_id, cf_headers)
                 
@@ -1112,20 +1101,23 @@ async def setup_aliyun_domains(req: AliyunDomainImport, db: Session = Depends(ge
                     if not name_servers:
                         raise Exception("无法获取 Cloudflare NameServers")
                     
-                    # --- 1. 自动添加 A 记录 ---
+                    # --- 1. 自动添加 A 记录 (修复：显示详细报错) ---
                     if current_server_ip:
                         try:
-                            dns_payload = {
-                                "type": "A", "name": "@", "content": current_server_ip, "ttl": 1, "proxied": True
-                            }
-                            await client.post(
+                            print(f">>> 正在解析 {domain_name} 到 {current_server_ip}")
+                            dns_resp = await client.post(
                                 f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
                                 headers=cf_headers,
-                                json=dns_payload
+                                json={"type":"A","name":"@","content":current_server_ip.strip(),"ttl":1,"proxied":True}
                             )
-                            print(f">>> A记录添加成功: {domain_name}")
+                            if dns_resp.status_code != 200:
+                                print(f"!!! [解析失败] {domain_name}: {dns_resp.text}")
+                            else:
+                                print(f">>> [解析成功] {domain_name}")
                         except Exception as e:
-                            print(f">>> A记录添加失败: {e}")
+                            print(f"!!! [解析异常] {str(e)}")
+                    else:
+                        print(f"!!! [跳过解析] 未能获取到服务器 IP")
 
                     # --- 2. 【核心新增】自动应用防红配置 ---
                     await auto_configure_cf_security(client, zone_id, cf_headers)
