@@ -53,17 +53,23 @@ def generate_random_path(length=6):
 
 # --- 辅助函数：获取公网 IP ---
 async def get_public_ip():
-    """尝试获取服务器的公网 IP"""
+    # 1. 优先从环境变量获取 (最稳)
+    env_ip = os.getenv("SERVER_IP")
+    if env_ip:
+        print(f">>> 使用配置的服务器 IP: {env_ip}")
+        return env_ip
+
+    # 2. 尝试自动获取
     try:
         async with httpx.AsyncClient() as client:
-            # 使用 ipify 服务获取公网 IP
             resp = await client.get('https://api.ipify.org', timeout=5)
             if resp.status_code == 200:
                 ip = resp.text.strip()
-                print(f">>> 检测到服务器公网 IP: {ip}")
+                print(f">>> 自动检测到 IP: {ip}")
                 return ip
     except Exception as e:
         print(f">>> 无法自动获取公网 IP: {e}")
+    
     return None
 
 # --- 核心：Cloudflare 自动防红配置函数 ---
@@ -276,6 +282,33 @@ def sync_landing_pool_to_redis(project_id: int, db: Session):
     except redis.exceptions.ConnectionError:
         print("!!! Redis B Pool Sync 失败.")
 
+# --- 补全缺失的 NS 检查函数 ---
+def check_ns_status(domain_obj):
+    """检查域名的 NS 记录状态"""
+    try:
+        expected_ns = domain_obj.ns_servers.split(",") if domain_obj.ns_servers else []
+        if not expected_ns:
+            return "unknown", "未配置预期 NS 服务器"
+        
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = 10
+        resolver.lifetime = 10
+        answers = resolver.resolve(domain_obj.domain, 'NS')
+        current_ns = [str(rdata).lower().rstrip('.') for rdata in answers]
+        
+        # 检查是否包含（只要包含预期的即可，顺序无关）
+        is_active = all(ns in current_ns for ns in expected_ns)
+        
+        if is_active:
+            return "active", "NS 记录已生效: " + ', '.join(current_ns)
+        else:
+            return "pending", "NS 记录未生效。当前: " + ', '.join(current_ns) + "，预期: " + ', '.join(expected_ns)
+    except dns.resolver.NoAnswer:
+        return "failed", "域名查询无 NS 记录"
+    except dns.resolver.NXDOMAIN:
+        return "failed", "域名不存在"
+    except Exception as e:
+        return "failed", "DNS 查询失败: " + str(e)
 # ================= 接口区域 =================
 
 @app.post("/api/login")
@@ -915,17 +948,21 @@ async def execute_aliyun_setup(req: AliyunDomainImport, db: Session = Depends(ge
                 unique_ns = [ns.lower() for ns in cf_result['result']['name_servers']]
                 zone_id = cf_result['result']['id']
                 
-                # --- 步骤 1.5: 自动添加 A 记录 ---
                 if current_server_ip:
                     try:
-                        await client.post(
+                        # 记录返回值以便检查
+                        rec_resp = await client.post(
                             f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
                             headers=cf_headers,
                             json={"type": "A", "name": "@", "content": current_server_ip, "ttl": 1, "proxied": True}
                         )
-                        print(f">>> A记录添加成功: {domain_name}")
-                    except: pass
-                
+                        # 检查状态码
+                        if rec_resp.status_code == 200:
+                            print(f">>> A记录添加成功: {domain_name}")
+                        else:
+                            print(f"!!! A记录添加失败 [{domain_name}]: {rec_resp.text}")
+                    except Exception as e:
+                        print(f"!!! A记录请求异常: {str(e)}")                
                 # --- 核心：自动防红配置 ---
                 await auto_configure_cf_security(client, zone_id, cf_headers)
                 

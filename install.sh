@@ -18,7 +18,7 @@ fi
 
 if [ -d "$INSTALL_DIR" ]; then
     cd $INSTALL_DIR
-    # 强制重置本地修改，确保 nginx.conf 变回模板状态
+    # 强制重置本地修改，确保配置模板最新
     git fetch --all
     git reset --hard origin/master
     git pull
@@ -34,24 +34,27 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # ==========================================
-# 3. 核心：生成随机凭证与入口配置
+# 3. 核心：自动生成配置 (账号、密码、IP)
 # ==========================================
 
-# 生成随机参数
+# 生成随机账号密码
 RANDOM_USER=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)
 RANDOM_PASS=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)
 RANDOM_PATH=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)
 
-echo ">>> 生成随机配置..."
-# 写入后端环境文件
+# 【关键】自动获取当前服务器公网 IP
+CURRENT_IP=$(curl -s ifconfig.me)
+
+echo ">>> 正在生成环境配置..."
+# 写入 .env 文件 (这文件只在客户服务器上生成，不在 Git 里)
 echo "ADMIN_USER=$RANDOM_USER" > .env
 echo "ADMIN_PASS=$RANDOM_PASS" >> .env
+echo "SERVER_IP=$CURRENT_IP" >> .env  # <--- 这里！自动写入当前服务器IP
 
-# 【关键步骤】替换 Nginx 模板中的占位符
-# 此时 nginx.conf 里一定有 SECRET_ENTRANCE_PLACEHOLDER (因为上面 git reset 过)
+# 替换 Nginx 入口
 sed -i "s/SECRET_ENTRANCE_PLACEHOLDER/$RANDOM_PATH/g" openresty/conf/nginx.conf
 
-# 清理并创建数据库文件
+# 初始化数据库文件
 rm -rf backend/traffic.db traffic.db
 touch traffic.db
 chmod 777 traffic.db
@@ -63,14 +66,13 @@ chmod +x backend/*.py
 docker compose up -d --build
 
 # 5. 输出结果
-IP=$(curl -s ifconfig.me)
-
 echo -e "${GREEN}=============================================${NC}"
 echo -e "${GREEN}   系统安装完成！请保存以下信息             ${NC}"
 echo -e "${GREEN}=============================================${NC}"
-echo -e "后台入口: http://$IP/$RANDOM_PATH"
-echo -e "账号: $RANDOM_USER"
-echo -e "密码: $RANDOM_PASS"
+echo -e "服务器 IP: $CURRENT_IP"
+echo -e "后台入口 : http://$CURRENT_IP/$RANDOM_PATH"
+echo -e "账号     : $RANDOM_USER"
+echo -e "密码     : $RANDOM_PASS"
 echo -e "---------------------------------------------"
-echo -e "安全机制：直接访问首页将显示 404，必须通过入口进入。"
+echo -e "注意：系统已自动配置解析 IP 为本机 IP ($CURRENT_IP)"
 echo -e "${GREEN}=============================================${NC}"
