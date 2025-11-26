@@ -75,3 +75,13 @@ class AdminUser(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+# 7. 实时流量统计表 (新增)
+class TrafficStats(Base):
+    __tablename__ = "traffic_stats"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, index=True)
+    # 统计类型: 'hit' (有效点击), 'bot' (拦截爬虫)
+    stat_type = Column(String, index=True) 
+    count = Column(Integer, default=1) # 存储汇总后的计数
+    timestamp = Column(DateTime, default=datetime.utcnow)

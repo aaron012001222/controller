@@ -25,7 +25,7 @@ from typing import Dict, Any
 import asyncio
 
 # 导入数据库模型
-from database import SessionLocal, init_db, EntryDomain, LandingDomain, Project, SystemSetting, DomainStatusLog, AdminUser
+from database import SessionLocal, init_db, EntryDomain, LandingDomain, Project, SystemSetting, DomainStatusLog, AdminUser, TrafficStats
 from worker import start_scheduler, check_domain_status 
 
 app = FastAPI(title="Traffic Control System")
@@ -138,7 +138,7 @@ except:
     print("!!! Redis 连接失败，请检查 Docker。")
 
 # --- 商业配置 ---
-SECRET_KEY = "commercial_secret_key"
+SECRET_KEY = "new_and_unique_commercial_secret_key_v2"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
@@ -151,6 +151,11 @@ def get_db():
         db.close()
 
 # --- 模型定义 ---
+class LogHitRequest(BaseModel):
+    project_id: int
+    is_bot: bool
+    domain: str
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -362,6 +367,26 @@ async def save_settings(req: SettingRequest, db: Session = Depends(get_db), curr
     if req.aliyun_secret: db.merge(SystemSetting(key="aliyun_secret", value=req.aliyun_secret))
     db.commit()
     return {"code": 200, "message": "系统设置已保存"}
+
+# 【新增 I】Redis 连接配置
+# ----------------------------------------------------
+# 注意：假设 Redis 服务的名称/IP 是 'redis'，端口是 6379 
+r: Optional[redis.Redis] = None
+try:
+    r = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+    r.ping()
+    print(">>> Redis 连接成功！")
+except Exception as e:
+    print(f">>> Redis 连接失败: {e}，流量统计功能将无法使用。")
+    r = None # 保持 r 为 None
+
+# ----------------------------------------------------
+# 【新增 II】日志上报 Pydantic 模型
+# ----------------------------------------------------
+class LogHitRequest(BaseModel):
+    project_id: int
+    is_bot: bool
+    domain: str
 
 @app.get("/api/settings")
 async def get_settings(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
@@ -1349,3 +1374,36 @@ async def worker_status():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# 【新增 III】Lua 网关流量日志上报 API (推荐方式二)
+# ----------------------------------------------------
+@app.post("/api/log/hit")
+async def log_traffic_hit(req: LogHitRequest):
+    """
+    接收来自 Lua 网关的点击日志。使用 Redis 计数器，实现高速、非阻塞记录。
+    """
+    
+    # 检查 Redis 是否连接
+    if r is None:
+        return {"code": 500, "message": "Redis not connected"}
+
+    # 1. 确定统计类型 ('bot' 或 'hit')
+    stat_type = "bot" if req.is_bot else "hit"
+    
+    # 2. 构造 Redis Key: 格式 'stats:类型:project:项目ID'
+    redis_key = f'stats:{stat_type}:project:{req.project_id}'
+    
+    try:
+        # 3. 递增计数器
+        r.incr(redis_key)
+        
+        # 4. 设置 Key 的过期时间 (可选，防止 Redis 中 Key 无限增长)
+        # r.expire(redis_key, 60 * 60 * 24 * 7) # 例如：设置 7 天过期
+        
+    except Exception as e:
+        # Redis 写入失败时的处理，只打印日志，不抛出异常，确保网关快速重定向
+        print(f"Redis 写入日志失败: {e}") 
+        return {"code": 500, "message": "Redis error"}
+        
+    # 成功写入 Redis
+    return {"code": 200, "message": "Logged"}
