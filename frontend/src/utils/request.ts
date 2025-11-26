@@ -4,7 +4,7 @@ import router from '../router' // 引入路由实例，用于 401 跳转
 
 // 创建 axios 实例
 const service = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api', // 指向你的 Python 后端
+  baseURL: '/api', // 指向你的 Python 后端
   timeout: 5000 // 请求超时
 })
 
