@@ -1,8 +1,6 @@
-<!-- src/layouts/AdminLayout.vue -->
 <template>
   <div class="page-container">
     <el-container class="layout-container">
-      <!-- 侧边栏 -->
       <el-aside width="240px" class="sidebar">
         <div class="logo-area">
           <div class="logo-icon">🚀</div>
@@ -18,45 +16,35 @@
           text-color="#333"
           active-text-color="#409EFF"
         >
-          <!-- 仪表盘 -->
           <el-menu-item index="/" @click="$router.push('/')">
             <el-icon><Odometer /></el-icon>
             <span>控制中心</span>
           </el-menu-item>
 
-          <!-- 项目管理 -->
           <el-menu-item index="/projects" @click="$router.push('/projects')">
             <el-icon><FolderOpened /></el-icon>
             <span>项目管理</span>
           </el-menu-item>
 
-          <!-- 域名管理 -->
           <el-menu-item index="/domains" @click="$router.push('/domains')">
             <el-icon><List /></el-icon>
             <span>域名仓库</span>
           </el-menu-item>
 
-          <!-- 系统设置 - 带子菜单 -->
           <el-sub-menu index="4">
             <template #title>
               <el-icon><Setting /></el-icon>
               <span>系统设置</span>
             </template>
-            <el-menu-item index="4-1" @click="$router.push('/settings')">
+            <el-menu-item index="/settings" @click="$router.push('/settings')">
               <el-icon><Key /></el-icon>
               <span>API 配置</span>
             </el-menu-item>
-            <!-- 新增：NS 状态检查菜单项 -->
-            <el-menu-item index="4-2" @click="$router.push('/settings/nameserver-check')">
-              <el-icon><Monitor /></el-icon>
-              <span>NS 状态检查</span>
-            </el-menu-item>
-          </el-sub-menu>
+            </el-sub-menu>
         </el-menu>
 
         <div class="spacer"></div>
 
-        <!-- 退出登录 -->
         <div class="logout-area">
           <el-menu class="logout-menu">
             <el-menu-item class="logout-item" @click="handleLogout">
@@ -67,10 +55,8 @@
         </div>
       </el-aside>
 
-      <!-- 主内容区 -->
       <el-container>
         <el-header style="padding: 0; height: auto;">
-          <!-- 顶部页面信息和用户信息 -->
           <div class="main-header">
             <div class="page-info">
               <h2 class="page-title">{{ currentRouteTitle }}</h2>
@@ -127,6 +113,11 @@ const userStore = useUserStore()
 
 // 计算当前激活的菜单
 const activeMenu = computed(() => {
+  // 修正：如果当前路径是 /settings，则 activeMenu 应该是 /settings
+  // 并在 el-menu-item index="4-1" 中使用 /settings
+  if (route.path.startsWith('/settings')) {
+    return '/settings';
+  }
   return route.path
 })
 
@@ -149,10 +140,8 @@ const handleUserCommand = (command: string) => {
   if (command === 'logout') {
     handleLogout()
   } else if (command === 'profile') {
-    // 可以跳转到个人资料页面，或者暂时不做处理
     ElMessage.info('功能开发中')
   } else if (command === 'account') {
-    // ✅ 补上这一段：跳转到账户安全页面
     router.push('/account/settings')
   }
 }
@@ -166,6 +155,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 样式保持不变 */
 .page-container {
   height: 100vh;
   background: #f0f2f5;
