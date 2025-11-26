@@ -1,7 +1,7 @@
 <template>
-  <div class="login-container">
-    <video autoplay muted loop playsinline class="bg-video">
-      <source :src="videoSource" type="video/mp4" />
+  <div class="login-container" oncontextmenu="return false;"> 
+    
+    <video autoplay muted loop playsinline preload="auto" class="bg-video" oncontextmenu="return false;">
       您的浏览器不支持视频背景。
     </video>
 
@@ -31,16 +31,23 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useUserStore } from '../store/user'
+import { useRouter } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
-// 核心修改：引入你的视频文件
-// Vite 会自动处理这个路径，请确保文件 src/assets/bg_video.mp4 存在！
-import videoSource from '../assets/bg_video.mp4'
-
 const store = useUserStore()
+const router = useRouter()
 const loading = ref(false)
-const form = reactive({ username: 'admin', password: '' }) // 方便测试先填好账号
+
+const form = reactive({
+  username: '',
+  password: ''
+})
+
+// 视频源路径，假设您将 bg_video.mp4 放在 /public/ 目录下
+const videoSource = ref('/bg_video.mp4')
+// 如果您也创建了 webm 格式，则使用此变量
+// const videoSourceWebM = ref('/bg_video.webm') 
 
 const handleLogin = async () => {
   if(!form.username || !form.password) {
@@ -48,52 +55,64 @@ const handleLogin = async () => {
     return
   }
   loading.value = true
+  
   // 增加一点人为延迟，让loading效果更明显，显得系统很专业
   await new Promise(r => setTimeout(r, 800)) 
-  await store.login(form)
-  loading.value = false
+  
+  try {
+    // 【核心修复】将 form 对象作为唯一的参数传递给 store.login
+    await store.login(form) // <--- 只需要传递 form 对象
+    
+    // 假设 store.login 成功后会处理路由跳转
+    
+  } catch(e) {
+    // 假设错误处理在 store/user.ts 的 login 方法中
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
 <style scoped>
 .login-container {
-  height: 100vh;
   width: 100vw;
-  /* 给一个深色底色，防止视频加载慢时闪白屏 */
-  background-color: #000; 
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #fff;
-  overflow: hidden;
   position: relative;
+  overflow: hidden; 
 }
 
-/* 核心修改：视频标签的样式 */
+/* 视频样式优化 */
 .bg-video {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  /* 关键属性：让视频像背景图一样覆盖全屏，不拉伸变形 */
-  object-fit: cover;
-  z-index: 0; /* 放在最底层 */
-  opacity: 0.8; /* 可以稍微降低点透明度，让前景文字更清晰 */
+  top: 50%;
+  left: 50%;
+  min-width: 100%; 
+  min-height: 100%;
+  width: auto;
+  height: auto;
+  z-index: 1; 
+  transform: translate(-50%, -50%); 
+  object-fit: cover; 
+  filter: blur(5px) brightness(0.6); 
+  transition: filter 1s ease-out; 
 }
 
 .login-box {
-  position: relative;
-  z-index: 10; /* 确保在视频上面 */
-  width: 420px;
-  padding: 45px 40px;
-  /* 核心修改：更高级的玻璃拟态效果 */
-  background: rgba(17, 25, 40, 0.75); /* 深蓝灰色半透明 */
-  backdrop-filter: blur(16px) saturate(180%); /* 毛玻璃模糊 + 饱和度提升 */
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  z-index: 10; 
+  padding: 40px 50px;
+  width: 400px; 
+  max-width: 90%;
+  
+  /* 玻璃效果 */
+  background: rgba(255, 255, 255, 0.05); 
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.125);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); /* 更深的阴影 */
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); 
   text-align: center;
 }
 
@@ -102,11 +121,33 @@ const handleLogin = async () => {
   font-weight: 800; 
   letter-spacing: 3px; 
   margin-bottom: 10px; 
-  background: linear-gradient(to right, #fff, #a5f3fc); /* 文字渐变光泽 */
+  background: linear-gradient(to right, #fff, #a5f3fc); 
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.subtitle { color: #94a3b8; font-size: 15px; margin-bottom: 35px; font-weight: 300; letter-spacing: 1px;}
+.subtitle { 
+  color: #94a3b8; 
+  font-size: 15px; 
+  margin-bottom: 35px; 
+  font-weight: 300; 
+  letter-spacing: 1px;
+}
+
+/* 修正 Element Plus 内部样式 */
+:deep(.el-input__wrapper) {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: none !important;
+}
+:deep(.el-input__inner) {
+    color: #fff;
+}
+:deep(.el-input__inner::placeholder) {
+    color: #a0a8b3;
+}
+:deep(.el-input__prefix) {
+    color: #fff;
+}
 
 .btn-login { 
   width: 100%; 
@@ -115,28 +156,18 @@ const handleLogin = async () => {
   height: 45px; 
   font-size: 16px;
   letter-spacing: 2px;
-  background: linear-gradient(to right, #2563eb, #06b6d4); /* 按钮渐变色 */
+  background: linear-gradient(to right, #2563eb, #06b6d4); 
   border: none;
 }
 .btn-login:hover {
-  background: linear-gradient(to right, #1d4ed8, #0891b2);
-  box-shadow: 0 0 15px rgba(6, 182, 212, 0.5); /* 悬停光晕 */
+    opacity: 0.9;
+    transform: translateY(-1px);
 }
 
-.footer-tips { margin-top: 25px; font-size: 12px; color: rgba(255, 255, 255, 0.3); letter-spacing: 1px; }
-
-/* 深度定制 Element Plus 输入框样式 */
-:deep(.el-input__wrapper) {
-  background-color: rgba(0, 0, 0, 0.2) !important;
-  box-shadow: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s;
+.footer-tips {
+  margin-top: 30px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
 }
-/* 输入框聚焦时发光 */
-:deep(.el-input__wrapper.is-focus) {
-  border-color: #06b6d4;
-  box-shadow: 0 0 0 1px #06b6d4 !important;
-}
-:deep(.el-input__inner) { color: #fff; height: 45px; }
-:deep(.el-input__prefix-inner) { color: rgba(255,255,255,0.5); }
 </style>

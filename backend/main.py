@@ -280,6 +280,8 @@ def check_ns_status(domain_obj):
         resolver = dns.resolver.Resolver()
         resolver.timeout = 10
         resolver.lifetime = 10
+        resolver.nameservers = ['1.1.1.1', '8.8.8.8']
+
         answers = resolver.resolve(domain_obj.domain, 'NS')
         current_ns = [str(rdata).lower().rstrip('.') for rdata in answers]
         

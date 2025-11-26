@@ -1,4 +1,4 @@
-// src/router/index.ts - 添加新路由
+// src/router/index.ts - 修复版本 (已移除 NameserverCheck 路由)
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
 import AdminLayout from '../layouts/AdminLayout.vue' 
@@ -6,7 +6,7 @@ import Dashboard from '../views/Dashboard.vue'
 import DomainList from '../views/Domain/List.vue'
 import Settings from '../views/Setting/Index.vue'
 import ProjectList from '../views/Project/List.vue'
-import NameserverCheck from '../views/Setting/NameserverCheck.vue' // 新增导入
+// import NameserverCheck from '../views/Setting/NameserverCheck.vue' // 移除导入
 
 const routes = [
   { path: '/login', component: Login },
@@ -43,20 +43,14 @@ const routes = [
         path: 'account/settings', // 路径
         name: 'AccountSettings',
         component: () => import('../views/Setting/Account.vue'),
-        // 关键点：加上 hidden: true，防止侧边栏自动渲染它 (如果你的侧边栏是动态生成的)
-        // 如果你的侧边栏是手写的，那只要你不写 menu-item，它自然就不会出现
         meta: { title: '账户安全', hidden: true } 
       },
-      // 新增路由
-      {
-        path: 'settings/nameserver-check',
-        name: 'NameserverCheck',
-        component: NameserverCheck,
-        meta: { title: 'NS状态检查', subtitle: '监控域名 NS 记录生效状态' }
-      }
-    ]
-  }
-]
+      // -------------------------------------------------------------
+      // 【NS状态检查路由已移除】
+      // -------------------------------------------------------------
+    ] // 修复：闭合 children 数组
+  } // 修复：闭合 '/' 路由对象
+] // 闭合 routes 数组
 
 const router = createRouter({
   history: createWebHistory(),
