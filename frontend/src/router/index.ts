@@ -8,6 +8,9 @@ import Settings from '../views/Setting/Index.vue'
 import ProjectList from '../views/Project/List.vue'
 // import NameserverCheck from '../views/Setting/NameserverCheck.vue' // 移除导入
 
+// 假设您已经定义或导入了 NotFoundComponent
+declare const NotFoundComponent: any; 
+
 const routes = [
   { path: '/login', component: Login },
   {
@@ -45,9 +48,15 @@ const routes = [
         component: () => import('../views/Setting/Account.vue'),
         meta: { title: '账户安全', hidden: true } 
       },
-      // -------------------------------------------------------------
-      // 【NS状态检查路由已移除】
-      // -------------------------------------------------------------
+      {
+        path: '/:catchAll(.*)', 
+        name: 'NotFound',
+        component: NotFoundComponent, // <--- 您需要创建一个 NotFound.vue 组件
+        meta: { title: '404' }
+      }, // <-- 修复: 将第 54 行的 `];` 改为 `,`
+// -------------------------------------------------------------
+// 【NS状态检查路由已移除】
+// -------------------------------------------------------------
     ] // 修复：闭合 children 数组
   } // 修复：闭合 '/' 路由对象
 ] // 闭合 routes 数组
