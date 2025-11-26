@@ -14,6 +14,8 @@ import os
 from aliyunsdkcore.client import AcsClient
 from aliyunsdkcore.acs_exception.exceptions import ServerException, ClientException
 from aliyunsdkdomain.request.v20180129 import QueryDomainListRequest, SaveBatchTaskForModifyingDomainDnsRequest 
+from sqlalchemy import func, extract
+from datetime import timedelta, datetime as dt
 
 import random
 import string
@@ -1398,3 +1400,49 @@ async def log_traffic_hit(req: LogHitRequest):
         
     # 成功写入 Redis
     return {"code": 200, "message": "Logged"}
+
+@app.get("/api/stats/summary")
+async def get_traffic_summary(db: Session = Depends(get_db)):
+    """获取所有统计数据：总览和 24 小时趋势"""
+    
+    now = dt.utcnow()
+    yesterday = now - timedelta(hours=24)
+    
+    # 1. 查询 24 小时总点击/拦截数
+    total_stats = db.query(
+        TrafficStats.stat_type, 
+        func.sum(TrafficStats.count).label('total')
+    ).filter(
+        TrafficStats.timestamp >= yesterday
+    ).group_by(TrafficStats.stat_type).all()
+    
+    total_hits = next((s.total for s in total_stats if s.stat_type == 'hit'), 0)
+    total_bots = next((s.total for s in total_stats if s.stat_type == 'bot'), 0)
+    
+    # 2. 查询 24 小时趋势数据（按小时聚合）
+    # 注意：SQLite 不支持标准的 DATE_TRUNC，我们使用strftime函数或 extract
+    # 为了简化，我们使用简单的日期过滤
+    
+    hourly_query = db.query(
+        func.strftime('%H', TrafficStats.timestamp).label('hour'),
+        TrafficStats.stat_type,
+        func.sum(TrafficStats.count).label('count')
+    ).filter(
+        TrafficStats.timestamp >= yesterday
+    ).group_by(1, 2).all()
+    
+    # 转换为前端 ECharts 所需的格式
+    hourly_data = {}
+    for hour, stat_type, count in hourly_query:
+        if hour not in hourly_data:
+            hourly_data[hour] = {'hit': 0, 'bot': 0}
+        hourly_data[hour][stat_type] = count
+        
+    return {
+        "code": 200,
+        "data": {
+            "total_hits": int(total_hits),
+            "total_bots": int(total_bots),
+            "hourly_data": hourly_data
+        }
+    }

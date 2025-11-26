@@ -132,31 +132,73 @@ import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import * as echarts from 'echarts' 
 import { ElMessage, ElNotification } from 'element-plus'
-import { 
-  Monitor, Warning, TrendCharts, Lock,
-  Refresh, WarnTriangleFilled, CirclePlusFilled
+import { 
+  Odometer, List, Setting, SwitchButton, FolderOpened, Plus,
+  RefreshRight, Monitor, Warning, TrendCharts, Lock, Refresh, WarnTriangleFilled, CirclePlusFilled 
 } from '@element-plus/icons-vue'
 
+// 【核心修复】: 定义接口避免 TS2538 错误
+interface HourlyStats {
+    hit: number;
+    bot: number;
+}
+
+// 【新增变量】存储统计数据
+const trafficStats = ref({
+    total_hits: 0,
+    total_bots: 0,
+    hourly_data: {} as Record<string, HourlyStats>
+})
+
 // 【核心修复】：实例化 store 对象
-const store = useUserStore() 
+const store = useUserStore()
 
 // 统计卡片
-const statCards = [
-  { label: '活跃域名', value: '1', icon: Monitor, color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
-  { label: '今日请求', value: '0', icon: TrendCharts, color: 'linear-gradient(135deg, #2af598 0%, #009efd 100%)' },
-  { label: '拦截威胁', value: '0', icon: Lock, color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)' },
+const statCards = ref([
+  { label: '活跃域名', value: '0', icon: Monitor, color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+  { label: '今日点击', value: '0', icon: TrendCharts, color: 'linear-gradient(135deg, #2af598 0%, #009efd 100%)' }, 
+  { label: '拦截威胁', value: '0', icon: Lock, color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)' }, 
   { label: '系统健康', value: '100%', icon: Warning, color: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' }
-]
+])
 
 const tableData = ref([])
 const fetchData = async () => {
   try {
     const res: any = await request.get('/domains') 
     if(res && res.code === 200) tableData.value = res.data
+    
+    // 【修复 171 行】：明确检查 statCards 数组长度和索引 0
+    if (res.data && statCards.value.length > 0) {
+        if (statCards.value[0]) { // ✅ 修复 TS2532
+            statCards.value[0].value = res.data.length.toLocaleString()
+        }
+    }
   } catch(e) { console.error(e) }
 }
+// 【新增函数】获取流量统计数据
+const fetchStats = async () => {
+    try {
+        const res: any = await request.get('/stats/summary') 
+        if(res.code === 200 && res.data) {
+            trafficStats.value = res.data
+            
+            // 1. 更新 statCards 数据 (修复 Line 185 & 188: 增加索引检查)
+            if (statCards.value.length > 1 && statCards.value[1]) { // ✅ 修复 TS2532
+                 statCards.value[1].value = trafficStats.value.total_hits.toLocaleString()
+            }
+            if (statCards.value.length > 2 && statCards.value[2]) { // ✅ 修复 TS2532
+                statCards.value[2].value = trafficStats.value.total_bots.toLocaleString()
+            }
+            
+            // 2. 更新 ECharts 图表数据
+            initChart()
+        }
+    } catch(e) {
+         ElMessage.error('获取流量统计失败');
+    }
+}
 
-// 同步逻辑
+// 同步逻辑 (保持不变)
 const syncVisible = ref(false)
 const step = ref(1)
 const cfToken = ref('')
@@ -224,13 +266,61 @@ const initChart = async () => {
   if (!chartRef.value) return
   if (chartInstance != null) chartInstance.dispose();
   chartInstance = echarts.init(chartRef.value)
-  const option = {
+  
+  // --- 图表数据处理 ---
+  const hours = Array.from({length: 24}, (_, i) => {
+    const d = new Date();
+    d.setHours(d.getHours() - (23 - i));
+    return `${String(d.getHours()).padStart(2, '0')}:00`;
+  });
+
+// 从后端数据中提取对应的值，如果该小时没有数据，则为 0
+
+const getSeriesData = (type: 'hit' | 'bot') => {
+  return hours.map(h => {
+    // 确保 hourKey 不会是 undefined
+    const hourParts = h.split(':');
+    const hourKey = hourParts[0] || '0'; // 如果分割失败，默认使用 '0'
+    
+    // 使用类型断言
+    const data = trafficStats.value.hourly_data as Record<string, HourlyStats | undefined>;
+    
+    // 安全地获取 hourlyStats
+    const hourlyStats = data[hourKey];
+    
+    // 使用类型守卫和默认值处理
+    const value = hourlyStats ? hourlyStats[type] || 0 : 0;
+    
+    return value;
+  });
+};
+
+  const hitData = getSeriesData('hit');
+  const botData = getSeriesData('bot');
+
+ const option = {
     tooltip: { trigger: 'axis' },
+    legend: { data: ['有效点击', '拦截威胁'] },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'] },
+    xAxis: { type: 'category', boundaryGap: false, data: hours },
     yAxis: { type: 'value', splitLine: { lineStyle: { type: 'dashed', color: '#eee' } } },
     series: [
-      { name: '流量', type: 'line', smooth: true, itemStyle: { color: '#409EFF' }, areaStyle: { color: '#ecf5ff' }, data: [120, 132, 101, 134, 90, 230, 210] }
+      { 
+        name: '有效点击', 
+        type: 'line', 
+        smooth: true, 
+        itemStyle: { color: '#409EFF' }, 
+        areaStyle: { color: '#ecf5ff' }, 
+        data: hitData 
+      },
+      { 
+        name: '拦截威胁', 
+        type: 'line', 
+        smooth: true, 
+        itemStyle: { color: '#F56C6C' }, 
+        areaStyle: { color: 'rgba(245, 108, 108, 0.1)' }, 
+        data: botData 
+      }
     ]
   }
   chartInstance.setOption(option)
@@ -238,9 +328,10 @@ const initChart = async () => {
 
 onMounted(() => {
   fetchData()
-  initChart()
+  fetchStats()
   window.addEventListener('resize', () => chartInstance?.resize())
 })
+
 onUnmounted(() => {
   window.removeEventListener('resize', () => chartInstance?.resize())
   chartInstance?.dispose()
