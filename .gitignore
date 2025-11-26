@@ -19,3 +19,8 @@ frontend/npm-debug.log
 
 # 注意：我们故意不忽略 frontend/dist 和 traffic.db (如果是初始空库)
 # 如果 traffic.db 包含敏感数据，请加上 backend/traffic.db
+
+*.db
+*.sqlite
+backend/*.db
+backend/traffic.db
