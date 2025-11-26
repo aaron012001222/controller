@@ -33,6 +33,13 @@ if not ok then
     return -- Redis 挂了，显示假博客 (安全第一)
 end
 
+-- 1.5. 管理员访问判断
+local admin_access = ngx.var.cookie_admin_access or ""
+if admin_access == "true" then
+    -- 如果有管理员 Cookie，直接放行，让 Nginx 渲染前端页面 (try_files)
+    ngx.log(ngx.NOTICE, "Admin Access Granted.")
+    return
+end
 
 -- 2. 获取当前访问的域名和路径
 local host = ngx.var.host or ""
