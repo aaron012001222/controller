@@ -34,27 +34,32 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # ==========================================
-# 3. 核心：自动生成配置 (账号、密码、IP)
+# 3. 核心：生成配置 (SSL、账号、IP)
 # ==========================================
 
-# 生成随机账号密码
+# 生成随机凭证
 RANDOM_USER=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)
 RANDOM_PASS=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)
 RANDOM_PATH=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)
 
-# 【关键】自动获取当前服务器公网 IP
+# 获取本机公网 IP
 CURRENT_IP=$(curl -s ifconfig.me)
 
 echo ">>> 正在生成环境配置..."
-# 写入 .env 文件 (这文件只在客户服务器上生成，不在 Git 里)
 echo "ADMIN_USER=$RANDOM_USER" > .env
 echo "ADMIN_PASS=$RANDOM_PASS" >> .env
-echo "SERVER_IP=$CURRENT_IP" >> .env  # <--- 这里！自动写入当前服务器IP
+echo "SERVER_IP=$CURRENT_IP" >> .env
 
 # 替换 Nginx 入口
 sed -i "s/SECRET_ENTRANCE_PLACEHOLDER/$RANDOM_PATH/g" openresty/conf/nginx.conf
 
-# 初始化数据库文件
+# 生成 SSL 自签名证书 (解决 521 错误)
+mkdir -p openresty/certs
+openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
+    -subj "/C=US/ST=Denial/L=Springfield/O=Dis/CN=localhost" \
+    -keyout openresty/certs/server.key -out openresty/certs/server.crt
+
+# 初始化数据库
 rm -rf backend/traffic.db traffic.db
 touch traffic.db
 chmod 777 traffic.db
@@ -63,7 +68,7 @@ chmod 777 traffic.db
 
 # 4. 启动服务
 chmod +x backend/*.py
-docker compose up -d --build
+docker compose up -d --build --force-recreate
 
 # 5. 输出结果
 echo -e "${GREEN}=============================================${NC}"
@@ -74,5 +79,5 @@ echo -e "后台入口 : http://$CURRENT_IP/$RANDOM_PATH"
 echo -e "账号     : $RANDOM_USER"
 echo -e "密码     : $RANDOM_PASS"
 echo -e "---------------------------------------------"
-echo -e "注意：系统已自动配置解析 IP 为本机 IP ($CURRENT_IP)"
+echo -e "安全提示：直接访问首页将显示 404，必须通过入口进入。"
 echo -e "${GREEN}=============================================${NC}"
