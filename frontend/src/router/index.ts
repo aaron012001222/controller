@@ -39,6 +39,14 @@ const routes = [
         component: Settings,
         meta: { title: '系统设置', subtitle: '配置 API 密钥与第三方服务接入' }
       },
+      {
+        path: 'account/settings', // 路径
+        name: 'AccountSettings',
+        component: () => import('../views/Setting/Account.vue'),
+        // 关键点：加上 hidden: true，防止侧边栏自动渲染它 (如果你的侧边栏是动态生成的)
+        // 如果你的侧边栏是手写的，那只要你不写 menu-item，它自然就不会出现
+        meta: { title: '账户安全', hidden: true } 
+      },
       // 新增路由
       {
         path: 'settings/nameserver-check',

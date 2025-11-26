@@ -6,7 +6,7 @@
       <el-aside width="240px" class="sidebar">
         <div class="logo-area">
           <div class="logo-icon">🚀</div>
-          <div class="logo-text">流量调度系统</div>
+          <div class="logo-text">中转轮询系统</div>
         </div>
         
         <el-menu
@@ -87,6 +87,7 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="profile">个人资料</el-dropdown-item>
+                    <el-dropdown-item command="account">账户安全</el-dropdown-item>
                     <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -143,12 +144,14 @@ const handleLogout = () => {
 }
 
 // 处理用户下拉菜单命令
+// 处理用户下拉菜单命令
 const handleUserCommand = (command: string) => {
   if (command === 'logout') {
     handleLogout()
-  } else if (command === 'profile') {
-    // 可以跳转到个人资料页面
-    console.log('跳转到个人资料页面')
+  } 
+  else if (command === 'account') {
+    // 【新增】跳转到账户安全页面
+    router.push('/account/settings')
   }
 }
 
