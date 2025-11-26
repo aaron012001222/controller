@@ -2,6 +2,7 @@
   <div class="login-container" oncontextmenu="return false;"> 
     
     <video autoplay muted loop playsinline preload="auto" class="bg-video" oncontextmenu="return false;">
+      <source :src="videoSource" type="video/mp4" />
       您的浏览器不支持视频背景。
     </video>
 
@@ -17,7 +18,7 @@
           <el-input v-model="form.password" type="password" placeholder="密码" :prefix-icon="Lock" show-password />
         </el-form-item>
         <el-button type="primary" class="btn-login" @click="handleLogin" :loading="loading">
-          {{ loading ? '正在接入...' : '立即接入' }}
+          {{ loading ? '正在接入...' : '立即登入' }}
         </el-button>
       </el-form>
 
