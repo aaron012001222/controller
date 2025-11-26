@@ -264,11 +264,36 @@ onUnmounted(() => {
 .stat-label { font-size: 12px; color: #8c8c8c; margin-bottom: 4px; }
 .stat-value { font-size: 24px; font-weight: bold; color: #1f1f1f; }
 
-/* 图表区域 */
+/* --- 图表区域核心修正 --- */
 .chart-row { margin-bottom: 24px; }
-.chart-card { border: none; border-radius: 12px; height: 380px; display: flex; flex-direction: column; }
+
+/* 1. chart-card 设置为垂直 Flex 容器，并保持固定高度 */
+.chart-card { 
+    border: none; 
+    border-radius: 12px; 
+    height: 380px; /* 保持卡片整体高度 */
+    display: flex; 
+    flex-direction: column; 
+}
 .card-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
-.echarts-box { width: 100%; height: 300px; margin-top: 10px; }
+
+/* 2. 强制 el-card__body 填充剩余空间并保持垂直 Flex */
+.chart-card :deep(.el-card__body) {
+    flex-grow: 1; 
+    display: flex;
+    flex-direction: column;
+    /* 调整内边距让图表有更多空间 */
+    padding: 10px 20px 20px 20px; 
+}
+
+/* 3. 让 ECharts 容器 flex-grow 1，占据 el-card__body 的所有剩余空间 */
+.echarts-box { 
+    width: 100%; 
+    flex-grow: 1; /* 关键：占据所有剩余垂直空间 */
+    margin-top: 10px; 
+}
+/* --- 修正结束 --- */
+
 
 /* 快捷操作区 */
 .action-grid { display: flex; justify-content: space-between; margin-bottom: 20px; }

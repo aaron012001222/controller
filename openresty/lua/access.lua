@@ -12,6 +12,13 @@ local function get_random_url(redis_key, list_size)
         return nil
     end
 
+    -- 核心修复：使用当前时间的纳秒作为随机数种子
+    -- ngx.now() 返回秒，ngx.var.msec 返回毫秒，结合起来更随机
+    -- 结合 ngx.update_time() 使用可以获得更精确的时间，但在这里可以直接使用
+    -- 使用 os.time() * 1000000 + ngx.var.msec 也可以，这里使用最简洁且有效的方式
+    local seed = ngx.time() * 1000 + tonumber(string.sub(ngx.var.msec, 3))
+    math.randomseed(seed)
+
     -- Redis List 索引从 0 开始。
     -- 随机选择一个索引 (0 到 list_size - 1)
     local index = math.random(0, list_size - 1) 

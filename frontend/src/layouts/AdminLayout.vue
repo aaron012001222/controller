@@ -21,7 +21,7 @@
           <!-- 仪表盘 -->
           <el-menu-item index="/" @click="$router.push('/')">
             <el-icon><Odometer /></el-icon>
-            <span>指挥中心</span>
+            <span>控制中心</span>
           </el-menu-item>
 
           <!-- 项目管理 -->
