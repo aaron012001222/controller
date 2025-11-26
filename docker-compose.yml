@@ -6,6 +6,8 @@ services:
     build: ./backend
     container_name: traffic_backend
     restart: always
+    env_file:
+      - .env
     volumes:
       - ./backend:/app           # 代码映射，方便热更
       - ./traffic.db:/app/traffic.db # 持久化数据库

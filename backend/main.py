@@ -1,4 +1,4 @@
-# main.py - 完整无删减版 (集成自动DNS解析 + Cloudflare全套防红配置 + 所有历史接口)
+# main.py - 终极无删减修复版
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -7,17 +7,12 @@ from jose import JWTError, jwt
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from database import DomainStatusLog
 import httpx
 import redis
 import json
+import os 
 from aliyunsdkcore.client import AcsClient
 from aliyunsdkcore.acs_exception.exceptions import ServerException, ClientException
-# 确保 worker 相关的导入完整
-from worker import start_scheduler, check_domain_status 
-# 确保数据库相关的导入完整
-from database import SessionLocal, init_db, EntryDomain, LandingDomain, Project, SystemSetting
-# 确保 Aliyun 相关的导入完整
 from aliyunsdkdomain.request.v20180129 import QueryDomainListRequest, SaveBatchTaskForModifyingDomainDnsRequest 
 
 import random
@@ -27,7 +22,11 @@ import hashlib
 import traceback
 import dns.resolver
 from typing import Dict, Any
-import asyncio # 确保导入 asyncio
+import asyncio
+
+# 导入数据库模型
+from database import SessionLocal, init_db, EntryDomain, LandingDomain, Project, SystemSetting, DomainStatusLog, AdminUser
+from worker import start_scheduler, check_domain_status 
 
 app = FastAPI(title="Traffic Control System")
 
@@ -119,7 +118,6 @@ def debug_aliyun_request(client, request, operation_name):
         response = client.do_action_with_exception(request)
         response_data = json.loads(response.decode('utf-8'))
         debug_info["status"] = "success"
-        # print(f"\n=== 阿里云API成功: {operation_name} ===\n")
         return response_data
     except Exception as e:
         print(f"\n!!! 阿里云API失败: {operation_name} - {str(e)}\n")
@@ -214,8 +212,17 @@ class AliyunSetupRequest(BaseModel):
     # 接收前端选择的域名名称列表
     selected_domains: List[str]
 
+# 单个绑定操作
+class LandingCreate(BaseModel):
+    url: str
+class BindEntryRequest(BaseModel):
+    domain_id: int
+
+class UpdateUserRequest(BaseModel):
+    username: str
+    password: str
+
 # --- 认证和用户模拟 ---
-fake_users_db = {"admin": {"username": "admin", "hashed_password": "admin888"}}
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
 def create_access_token(data: dict):
@@ -272,12 +279,31 @@ def sync_landing_pool_to_redis(project_id: int, db: Session):
 # ================= 接口区域 =================
 
 @app.post("/api/login")
-async def login(form_data: LoginRequest):
-    user = fake_users_db.get(form_data.username)
-    if not user or form_data.password != user["hashed_password"]:
+async def login(form_data: LoginRequest, db: Session = Depends(get_db)):
+    # 查数据库验证
+    user = db.query(AdminUser).filter(AdminUser.username == form_data.username).first()
+    if not user or form_data.password != user.password:
         raise HTTPException(status_code=400, detail="账号或密码错误")
-    token = create_access_token(data={"sub": user["username"]})
+    
+    token = create_access_token(data={"sub": user.username})
     return {"access_token": token, "token_type": "bearer"}
+
+@app.post("/api/user/update")
+async def update_admin_user(req: UpdateUserRequest, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    # 只能修改当前登录用户的密码
+    user = db.query(AdminUser).filter(AdminUser.username == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 检查新用户名是否冲突
+    if req.username != current_user:
+        exists = db.query(AdminUser).filter(AdminUser.username == req.username).first()
+        if exists: raise HTTPException(status_code=400, detail="用户名已存在")
+
+    user.username = req.username
+    user.password = req.password
+    db.commit()
+    return {"code": 200, "message": "账户已更新，请重新登录"}
 
 @app.post("/api/entry_domains/update_path")
 async def update_entry_domain_path(req: UpdateEntryPath, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
@@ -479,11 +505,6 @@ async def delete_domain(domain_id: int, db: Session = Depends(get_db), current_u
     return {"code": 200, "message": "删除成功"}
 
 # 单个绑定操作
-class LandingCreate(BaseModel):
-    url: str
-class BindEntryRequest(BaseModel):
-    domain_id: int
-
 @app.post("/api/projects/{project_id}/landing_single")
 async def add_landing_page_single(project_id: int, req: LandingCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     if not req.url.startswith("http"):
@@ -858,34 +879,6 @@ async def aliyun_setup_domain(db: Session = Depends(get_db), current_user: str =
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail="未知错误: " + str(e))
-
-# 假设 Cloudflare 的 NS
-TARGET_NS = {"ns1.cloudflare.com", "ns2.cloudflare.com"}
-
-def check_ns_status(domain_obj):
-    """检查域名的 NS 记录状态"""
-    try:
-        expected_ns = domain_obj.ns_servers.split(",") if domain_obj.ns_servers else []
-        if not expected_ns:
-            return "unknown", "未配置预期 NS 服务器"
-        
-        resolver = dns.resolver.Resolver()
-        resolver.timeout = 10
-        resolver.lifetime = 10
-        answers = resolver.resolve(domain_obj.domain, 'NS')
-        current_ns = [str(rdata).lower().rstrip('.') for rdata in answers]
-        is_active = all(ns in current_ns for ns in expected_ns)
-        
-        if is_active:
-            return "active", "NS 记录已生效: " + ', '.join(current_ns)
-        else:
-            return "pending", "NS 记录未生效。当前: " + ', '.join(current_ns) + "，预期: " + ', '.join(expected_ns)
-    except dns.resolver.NoAnswer:
-        return "failed", "域名查询无 NS 记录"
-    except dns.resolver.NXDOMAIN:
-        return "failed", "域名不存在"
-    except Exception as e:
-        return "failed", "DNS 查询失败: " + str(e)
 
 @app.post("/api/aliyun/execute_setup")
 async def execute_aliyun_setup(req: AliyunDomainImport, db: Session = Depends(get_db)):
@@ -1276,6 +1269,25 @@ async def on_startup():
     try:
         init_db()
         print(">>> 数据库初始化完成")
+        
+        # --- 核心：初始化随机管理员 ---
+        db = SessionLocal()
+        try:
+            # 检查是否存在用户
+            if not db.query(AdminUser).first():
+                # 从环境变量获取安装脚本生成的随机密码
+                env_user = os.getenv("ADMIN_USER", "admin")
+                env_pass = os.getenv("ADMIN_PASS", "admin888")
+                
+                new_admin = AdminUser(username=env_user, password=env_pass)
+                db.add(new_admin)
+                db.commit()
+                print(f">>> 初始化管理员账户: {env_user}")
+        finally:
+            db.close()
+        # --------------------------------
+        
+        # 延迟启动 worker
         import asyncio
         await asyncio.sleep(2)
         try:
@@ -1284,8 +1296,11 @@ async def on_startup():
             print(">>> 后台任务调度器启动成功")
         except Exception as e:
             print(f">>> 后台 Worker 启动失败: {str(e)}")
+            
     except Exception as e:
         print(f">>> 系统启动失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @app.get("/api/health")
 async def health_check():
