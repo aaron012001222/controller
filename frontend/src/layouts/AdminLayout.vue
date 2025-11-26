@@ -108,6 +108,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../store/user'
+import { ElMessage } from 'element-plus' //
 import { 
   Odometer, 
   FolderOpened, 
@@ -144,13 +145,14 @@ const handleLogout = () => {
 }
 
 // 处理用户下拉菜单命令
-// 处理用户下拉菜单命令
 const handleUserCommand = (command: string) => {
   if (command === 'logout') {
     handleLogout()
-  } 
-  else if (command === 'account') {
-    // 【新增】跳转到账户安全页面
+  } else if (command === 'profile') {
+    // 可以跳转到个人资料页面，或者暂时不做处理
+    ElMessage.info('功能开发中')
+  } else if (command === 'account') {
+    // ✅ 补上这一段：跳转到账户安全页面
     router.push('/account/settings')
   }
 }
