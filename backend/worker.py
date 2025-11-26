@@ -22,7 +22,6 @@ try:
 except ImportError as e:
     print(f">>> 导入数据库模块失败: {e}")
 
-from database import SessionLocal, EntryDomain, LandingDomain, DomainStatusLog
 
 # 抑制警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

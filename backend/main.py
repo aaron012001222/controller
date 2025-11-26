@@ -128,15 +128,6 @@ def _get_error_reason(error_code):
     }
     return error_reasons.get(error_code, "未知错误，请查看错误信息")
 
-# --- Redis 配置 ---
-REDIS_HOST = "redis"
-REDIS_PORT = 6379
-try:
-    pool = redis.ConnectionPool(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    r = redis.Redis(connection_pool=pool)
-except:
-    print("!!! Redis 连接失败，请检查 Docker。")
-
 # --- 商业配置 ---
 SECRET_KEY = "new_and_unique_commercial_secret_key_v2"
 ALGORITHM = "HS256"
