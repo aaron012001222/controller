@@ -36,7 +36,7 @@ end
 
 -- 2. 获取当前访问的域名和路径
 local host = ngx.var.host or ""
--- ngx.var.uri 是路径，如 /go/ 或者 /
+-- ngx.var.uri 是路径，如 /go/item.html
 local uri = ngx.var.uri or "" 
 
 
@@ -60,22 +60,37 @@ local project_id = entry_info["project_id"]
 local status = entry_info["status"]
 local required_path = entry_info["custom_path"] or "" -- 读取 custom_path 字段
 
+-- 核心修复开始: 路径验证和修正
+local redirect_uri = uri -- 默认使用完整 URI
+local path_matched = true 
 
--- 5. 路径验证 (核心新增：必须匹配自定义路径)
--- required_path 比如是 "go" 或 "asdf12"
+-- 5. 路径验证 (如果配置了自定义路径)
 if required_path ~= "" then
-    -- 检查 URI 是否以 /required_path/ 或 /required_path 开头
     local expected_path_part = "/" .. required_path
+    local expected_path_len = #expected_path_part
     
-    -- 如果用户访问的 URI 不是 /required_path 开头，则失败
-    if uri:sub(1, #expected_path_part) ~= expected_path_part then
+    -- 检查 URI 是否以 /required_path 开头
+    if uri:sub(1, expected_path_len) == expected_path_part then
+        -- 匹配成功，从 URI 中移除匹配的部分
+        local remaining_uri = uri:sub(expected_path_len + 1)
+        
+        -- 如果 remaining_uri 是空字符串，则重定向到 B 池的根路径 "/"
+        redirect_uri = remaining_uri == "" and "/" or remaining_uri
+        
+        ngx.log(ngx.NOTICE, "Path Matched. Required: ", required_path, " Redirect URI: ", redirect_uri)
+    else
+        path_matched = false
         ngx.log(ngx.NOTICE, "Path Mismatch. Required: ", required_path, " Actual URI: ", uri)
-        return -- 路径不匹配，执行伪装
     end
 end
 
+if not path_matched then
+    return -- 路径不匹配，执行伪装
+end
+-- 核心修复结束
 
--- 6. 状态和归属检查
+
+-- 6. 状态和归属检查 (移到路径修正之后)
 if status ~= "ok" or project_id == "0" then
     -- 域名被标记为 banned 或未分配，兜底显示假博客
     return 
@@ -99,8 +114,11 @@ if list_size > 0 then
     local target_url = get_random_url(landing_pool_key, list_size)
     
     if target_url then
-        ngx.log(ngx.NOTICE, "Successful route. Target: ", target_url)
-        return ngx.redirect(target_url, 302)
+        -- 核心：拼接 B 池 URL 和修正后的路径
+        local final_url = target_url .. redirect_uri
+        
+        ngx.log(ngx.NOTICE, "Successful route. Target: ", final_url)
+        return ngx.redirect(final_url, 302)
     end
 end
 
