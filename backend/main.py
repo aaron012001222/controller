@@ -1418,18 +1418,21 @@ async def get_traffic_summary(db: Session = Depends(get_db)):
     
     total_hits = next((s.total for s in total_stats if s.stat_type == 'hit'), 0)
     total_bots = next((s.total for s in total_stats if s.stat_type == 'bot'), 0)
-    
+
+    hourly_expr = func.strftime('%H', TrafficStats.timestamp).label('hour')
+
     # 2. 查询 24 小时趋势数据（按小时聚合）
-    # 注意：SQLite 不支持标准的 DATE_TRUNC，我们使用strftime函数或 extract
-    # 为了简化，我们使用简单的日期过滤
-    
+
     hourly_query = db.query(
-        func.strftime('%H', TrafficStats.timestamp).label('hour'),
+        hourly_expr, # 使用定义好的表达式
         TrafficStats.stat_type,
         func.sum(TrafficStats.count).label('count')
     ).filter(
         TrafficStats.timestamp >= yesterday
-    ).group_by(1, 2).all()
+    ).group_by(
+        hourly_expr,  # 【核心修复】：按小时表达式分组
+        TrafficStats.stat_type # 按统计类型分组
+    ).all()
     
     # 转换为前端 ECharts 所需的格式
     hourly_data = {}
