@@ -963,7 +963,7 @@ async def execute_aliyun_setup(req: AliyunDomainImport, db: Session = Depends(ge
                         dns_resp = await client.post(
                             f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
                             headers=cf_headers,
-                            json={"type":"A","name":"@","content":current_server_ip.strip(),"ttl":1,"proxied":True}
+                            json={"type":"A","name":"@","content":current_server_ip.strip(),"ttl":1,"proxied":False}
                         )
                         if dns_resp.status_code != 200:
                             print(f"!!! [解析失败] {domain_name}: {dns_resp.text}")
@@ -1128,7 +1128,7 @@ async def setup_aliyun_domains(req: AliyunDomainImport, db: Session = Depends(ge
                             dns_resp = await client.post(
                                 f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
                                 headers=cf_headers,
-                                json={"type":"A","name":"@","content":current_server_ip.strip(),"ttl":1,"proxied":True}
+                                json={"type":"A","name":"@","content":current_server_ip.strip(),"ttl":1,"proxied":False}
                             )
                             if dns_resp.status_code != 200:
                                 print(f"!!! [解析失败] {domain_name}: {dns_resp.text}")
@@ -1422,6 +1422,7 @@ async def get_traffic_summary(db: Session = Depends(get_db)):
     hourly_expr = func.strftime('%H', TrafficStats.timestamp).label('hour')
 
     # 2. 查询 24 小时趋势数据（按小时聚合）
+    hourly_expr = func.strftime('%H', TrafficStats.timestamp).label('hour')
 
     hourly_query = db.query(
         hourly_expr, # 使用定义好的表达式
@@ -1430,8 +1431,8 @@ async def get_traffic_summary(db: Session = Depends(get_db)):
     ).filter(
         TrafficStats.timestamp >= yesterday
     ).group_by(
-        hourly_expr,  # 【核心修复】：按小时表达式分组
-        TrafficStats.stat_type # 按统计类型分组
+        hourly_expr,  # 【修正】：按小时表达式分组
+        TrafficStats.stat_type # 【修正】：按统计类型分组
     ).all()
     
     # 转换为前端 ECharts 所需的格式

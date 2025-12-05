@@ -26,18 +26,19 @@ services:
       - redis_data:/data
 
   openresty:
-    image: openresty/openresty:alpine
+    build: ./openresty
     container_name: traffic_gateway
     restart: always
     ports:
       - "80:80"
       - "443:443"
-    volumes:
+  volumes:
       - ./openresty/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       - ./openresty/lua:/usr/local/openresty/nginx/lua
-      # 挂载证书目录
       - ./openresty/certs:/usr/local/openresty/nginx/certs
-      - ./frontend/dist:/usr/share/nginx/html 
+      - ./frontend/dist:/usr/share/nginx/html
+      # 挂载 SSL 存储目录 (重要！防止重启后证书丢失)
+      - ssl_data:/etc/resty-auto-ssl
     environment:
       - TZ=Asia/Shanghai
     depends_on:
@@ -46,3 +47,4 @@ services:
 
 volumes:
   redis_data:
+  ssl_data:

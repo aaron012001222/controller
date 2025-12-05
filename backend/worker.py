@@ -52,21 +52,43 @@ def check_domain_status(url):
         'Accept-Language': 'en-US,en;q=0.9',
     }
 
+BANNED_KEYWORDS = [
+        "反诈", "欺诈", "拦截", "停止访问", "非官方", "风险", 
+        "违法", "公安", "备案", "Blacklist", "Fraud", "Stop",
+        "申诉", "解封", "根据工信部", "被多人投诉"
+    ]
+
     try:
-        # 增加 timeout 防止卡死，verify=False 忽略证书错误
-        response = requests.get(url, headers=headers, timeout=10, verify=False)
+        # allow_redirects=True: 跟随跳转，防止拦截页是通过 301/302 跳过去的
+        # timeout=15: 稍微放宽超时，避免网络波动误判
+        response = requests.get(url, headers=headers, timeout=15, verify=False, allow_redirects=True)
         
-        # 核心修改：有些网站反爬会返回 403，但这说明网站是活着的
-        # 如果是 403/401 (权限不足)，也视为"ok" (因为网站通了)
-        # 只有 404 (找不到) 或 5xx (服务器崩了) 才算失效
-        if response.status_code < 500 and response.status_code != 404:
-            return 'ok'
-        else:
+        # 1. 基础状态码检查
+        # 注意：403/401 往往是权限验证，不代表域名死了；404 代表页面没了；5xx 代表服务器挂了
+        if response.status_code == 404 or response.status_code >= 500:
             return 'banned'
+
+        # 2. 核心：内容关键词检测 (解决 200 OK 拦截页问题)
+        # 强制使用 UTF-8 避免中文乱码导致匹配失败
+        response.encoding = 'utf-8' 
+        content = response.text
+
+        for keyword in BANNED_KEYWORDS:
+            if keyword in content:
+                print(f"!!! 域名 {url} 被标记为 Banned，匹配关键词: {keyword}")
+                return 'banned'
+
+        # 3. 这里的逻辑：如果状态码 < 500 且没匹配到关键词，认为是 OK
+        return 'ok'
             
-    except requests.exceptions.RequestException:
+    except requests.exceptions.SSLError:
+        # SSL 错误通常意味着证书过期或配置错误，视为不可用
         return 'banned'
-    except Exception:
+    except requests.exceptions.RequestException:
+        # 连接超时、DNS 解析失败等
+        return 'banned'
+    except Exception as e:
+        print(f"检查异常: {str(e)}")
         return 'banned'
 
 def check_ns_status(domain_obj):
