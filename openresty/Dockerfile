@@ -1,23 +1,19 @@
-FROM openresty/openresty:alpine
+# -----------------------------------------------------------
+# 使用官方提供的 "fat" 版本镜像
+# 这个版本已经预装了 luarocks, gcc, make, git 等所有编译工具
+# 绝对不会出现找不到 luarocks 的问题
+# -----------------------------------------------------------
+FROM openresty/openresty:alpine-fat
 
-# 1. 一次性安装所有依赖 (增加 git，以防 luarocks 拉取源码失败)
-RUN apk update && apk add --no-cache \
-    curl \
-    bash \
-    openssl \
-    build-base \
-    unzip \
-    luarocks \
-    git
+# 1. 仅安装 Auto-SSL 运行时的核心依赖 (openssl, curl, bash)
+# 注意：不需要再安装 luarocks 或 build-base，镜像里自带了
+RUN apk add --no-cache openssl curl bash
 
-# 2. 直接安装，不带任何路径前缀
-# apk 安装的 luarocks 会自动在系统 PATH 中，直接调用即可
+# 2. 直接安装插件 (肯定能成功，因为环境是预设好的)
 RUN luarocks install lua-resty-auto-ssl
 
-# 3. 创建目录并设置权限
+# 3. 创建必要的目录并设置权限
 RUN mkdir -p /etc/resty-auto-ssl \
     && chown nobody:nobody /etc/resty-auto-ssl \
-    && chmod 755 /etc/resty-auto-ssl
-
-# 4. 创建证书目录
-RUN mkdir -p /usr/local/openresty/nginx/certs
+    && chmod 755 /etc/resty-auto-ssl \
+    && mkdir -p /usr/local/openresty/nginx/certs
